@@ -8,6 +8,8 @@ import Control.Concurrent (forkIO)
 import Data.Map (fromList, lookup, Map, insert)
 import Prelude hiding (lookup)
 
+type DB = (Map String String)
+
 -------------------------------------------------------------------------------
 -- Server stuff
 -------------------------------------------------------------------------------
@@ -23,26 +25,26 @@ main = withSocketsDo $ do
     putStrLn $ "Listening on localhost:" ++ (head args)
     sockHandler sock database
 
-sockHandler :: Socket -> (TVar (Map String String)) -> IO ()
+sockHandler :: Socket -> (TVar DB) -> IO ()
 sockHandler sock db = do
     (handle, _, _) <- accept sock
     hSetBuffering handle NoBuffering
     forkIO $ commandProcessor handle db
     sockHandler sock db
 
-getCommand :: Handle -> String -> (TVar (Map String String)) -> IO ()
+getCommand :: Handle -> String -> (TVar DB) -> IO ()
 getCommand handle cmd db = do
     m <- atomRead db
     value <- getValue m cmd
     hPutStrLn handle $ value
 
-setCommand :: Handle -> [String] -> (TVar (Map String String)) -> IO ()
+setCommand :: Handle -> [String] -> (TVar DB) -> IO ()
 setCommand handle cmd db = do
     d <- atomRead db
     x <- atomically $ setValue db d (head cmd) (unwords (tail cmd))
     hPutStrLn handle $ "OK"
 
-commandProcessor :: Handle -> (TVar (Map String String)) -> IO ()
+commandProcessor :: Handle -> (TVar DB) -> IO ()
 commandProcessor handle db = do
     line <- hGetLine handle
     let cmd = words line
@@ -58,12 +60,12 @@ commandProcessor handle db = do
 
 atomRead = atomically . readTVar
 
-getValue :: (Map String String) -> String -> IO (String)
+getValue :: DB -> String -> IO (String)
 getValue db k = do
     case lookup k db of
       Just s -> return s
       Nothing -> return "null"
 
-setValue :: (TVar (Map String String)) -> (Map String String) -> String -> String -> STM ()
+setValue :: (TVar DB) -> DB -> String -> String -> STM ()
 setValue db map k v = do
     writeTVar db $ insert k v map
