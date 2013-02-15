@@ -19,11 +19,15 @@ version = "0.0.1"
 main :: IO ()
 main = withSocketsDo $ do
     args <- getArgs
-    let port = fromIntegral (read $ head args :: Int)
+    let port = getPort args
     database <- atomically $ newTVar $ fromList [("__version__", version)]
-    sock <- listenOn $ PortNumber port
-    putStrLn $ "Listening on localhost:" ++ (head args)
+    sock <- listenOn $ PortNumber $ fromIntegral port
+    putStrLn $ "Listening on localhost:" ++ (show port)
     sockHandler sock database
+
+getPort :: [String] -> Int
+getPort (x:xs) = read x :: Int
+getPort [] = 7777
 
 sockHandler :: Socket -> (TVar DB) -> IO ()
 sockHandler sock db = do
