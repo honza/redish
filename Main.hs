@@ -44,9 +44,11 @@ getCommand handle cmd db = do
 
 setCommand :: Handle -> [String] -> (TVar DB) -> IO ()
 setCommand handle cmd db = do
-    d <- atomRead db
-    atomically $ setValue db d (head cmd) (unwords (tail cmd))
+    appV (conv k v) db
     hPutStrLn handle $ "OK"
+    where k = (head cmd)
+          v = (unwords (tail cmd))
+
 
 commandProcessor :: Handle -> (TVar DB) -> IO ()
 commandProcessor handle db = do
@@ -65,12 +67,14 @@ commandProcessor handle db = do
 atomRead :: TVar a -> IO a
 atomRead = atomically . readTVar
 
+conv :: String -> String -> DB -> DB
+conv k v db = insert k v db
+
+appV :: (DB -> DB) -> TVar DB -> IO ()
+appV fn x = atomically $ readTVar x >>= writeTVar x . fn
+
 getValue :: DB -> String -> IO (String)
 getValue db k = do
     case lookup k db of
       Just s -> return s
       Nothing -> return "null"
-
-setValue :: (TVar DB) -> DB -> String -> String -> STM ()
-setValue db dbmap k v = do
-    writeTVar db $ insert k v dbmap
