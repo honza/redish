@@ -68,7 +68,7 @@ atomRead :: TVar a -> IO a
 atomRead = atomically . readTVar
 
 conv :: String -> String -> DB -> DB
-conv k v db = insert k v db
+conv = insert
 
 appV :: (DB -> DB) -> TVar DB -> IO ()
 appV fn x = atomically $ readTVar x >>= writeTVar x . fn
