@@ -11,8 +11,7 @@ Building
 
     $ git clone git://github.com/honza/redish.git
     $ cd redish
-    $ cabal configure
-    $ cabal build
+    $ make
     $ ./dist/build/redish/redish 7777
 
 Protocol
