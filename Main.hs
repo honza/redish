@@ -1,6 +1,6 @@
 import Control.Concurrent.STM
 import Control.Monad
-import Control.Monad.Trans (liftIO)
+-- import Control.Monad.Trans (liftIO)
 import Network (listenOn, withSocketsDo, accept, PortID(..), Socket)
 import System.Environment (getArgs)
 import System.IO (hSetBuffering, hGetLine, hPutStrLn, BufferMode(..), Handle)
@@ -14,6 +14,7 @@ type DB = (Map String String)
 -- Server stuff
 -------------------------------------------------------------------------------
 
+version :: String
 version = "0.0.1"
 
 main :: IO ()
@@ -26,14 +27,14 @@ main = withSocketsDo $ do
     sockHandler sock database
 
 getPort :: [String] -> Int
-getPort (x:xs) = read x :: Int
+getPort (x:_) = read x :: Int
 getPort [] = 7777
 
 sockHandler :: Socket -> (TVar DB) -> IO ()
 sockHandler sock db = do
     (handle, _, _) <- accept sock
     hSetBuffering handle NoBuffering
-    forkIO $ commandProcessor handle db
+    _ <- forkIO $ commandProcessor handle db
     sockHandler sock db
 
 getCommand :: Handle -> String -> (TVar DB) -> IO ()
@@ -45,7 +46,7 @@ getCommand handle cmd db = do
 setCommand :: Handle -> [String] -> (TVar DB) -> IO ()
 setCommand handle cmd db = do
     d <- atomRead db
-    x <- atomically $ setValue db d (head cmd) (unwords (tail cmd))
+    atomically $ setValue db d (head cmd) (unwords (tail cmd))
     hPutStrLn handle $ "OK"
 
 commandProcessor :: Handle -> (TVar DB) -> IO ()
@@ -62,6 +63,7 @@ commandProcessor handle db = do
 -- Data stuff
 -------------------------------------------------------------------------------
 
+atomRead :: TVar a -> IO a
 atomRead = atomically . readTVar
 
 getValue :: DB -> String -> IO (String)
@@ -71,5 +73,5 @@ getValue db k = do
       Nothing -> return "null"
 
 setValue :: (TVar DB) -> DB -> String -> String -> STM ()
-setValue db map k v = do
-    writeTVar db $ insert k v map
+setValue db dbmap k v = do
+    writeTVar db $ insert k v dbmap

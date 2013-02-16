@@ -17,4 +17,4 @@ cabal-version:       >=1.8
 executable redish
   main-is:           Main.hs
   build-depends:     base, stm, network, containers, mtl
-  Ghc-Options:       -threaded -O2
+  Ghc-Options:       -Wall -threaded -O2
