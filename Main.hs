@@ -42,21 +42,18 @@ getCommand handle cmd db = do
     value <- getValue m cmd
     hPutStrLn handle value
 
-setCommand :: Handle -> [String] -> (TVar DB) -> IO ()
-setCommand handle cmd db = do
-    appV (conv k v) db
+setCommand :: Handle -> String -> String -> (TVar DB) -> IO ()
+setCommand handle key value db = do
+    appV (conv key value) db
     hPutStrLn handle "OK"
-    where k = (head cmd)
-          v = (unwords (tail cmd))
-
 
 commandProcessor :: Handle -> (TVar DB) -> IO ()
 commandProcessor handle db = do
     line <- hGetLine handle
     let cmd = words line
-    case (head cmd) of
-        ("get") -> getCommand handle (unwords (tail cmd)) db
-        ("set") -> setCommand handle (tail cmd) db
+    case cmd of
+        "get":key     -> getCommand handle (unwords key) db
+        "set":key:val -> setCommand handle key (unwords val) db
         _ -> do hPutStrLn handle "Unknown command"
     commandProcessor handle db
 
