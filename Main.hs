@@ -1,6 +1,5 @@
 import Control.Concurrent.STM
 import Control.Monad
--- import Control.Monad.Trans (liftIO)
 import Network (listenOn, withSocketsDo, accept, PortID(..), Socket)
 import System.Environment (getArgs)
 import System.IO (hSetBuffering, hGetLine, hPutStrLn, BufferMode(..), Handle)
