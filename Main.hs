@@ -40,12 +40,12 @@ getCommand :: Handle -> String -> (TVar DB) -> IO ()
 getCommand handle cmd db = do
     m <- atomRead db
     value <- getValue m cmd
-    hPutStrLn handle $ value
+    hPutStrLn handle value
 
 setCommand :: Handle -> [String] -> (TVar DB) -> IO ()
 setCommand handle cmd db = do
     appV (conv k v) db
-    hPutStrLn handle $ "OK"
+    hPutStrLn handle "OK"
     where k = (head cmd)
           v = (unwords (tail cmd))
 
