@@ -71,7 +71,7 @@ conv :: String -> String -> DB -> DB
 conv = insert
 
 appV :: (DB -> DB) -> TVar DB -> IO ()
-appV fn x = atomically $ readTVar x >>= writeTVar x . fn
+appV fn x = atomically $ modifyTVar x fn
 
 getValue :: DB -> String -> IO (String)
 getValue db k = do
