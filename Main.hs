@@ -2,7 +2,7 @@ import Control.Concurrent.STM
 import Control.Monad
 import Network (listenOn, withSocketsDo, accept, PortID(..), Socket)
 import System.Environment (getArgs)
-import System.IO (hSetBuffering, hGetLine, hPutStrLn, BufferMode(..), Handle)
+import System.IO (hSetBuffering, hGetLine, hPutStrLn, hPutStr, BufferMode(..), Handle)
 import Control.Concurrent (forkIO)
 import Data.Map (fromList, lookup, Map, insert)
 import Prelude hiding (lookup)
@@ -14,7 +14,7 @@ type DB = Map String String
 -------------------------------------------------------------------------------
 
 version :: String
-version = "0.0.1"
+version = "0.0.2"
 
 main :: IO ()
 main = withSocketsDo $ do
@@ -29,6 +29,9 @@ getPort :: [String] -> Int
 getPort (x:_) = read x :: Int
 getPort [] = 7777
 
+crlf :: String
+crlf = "\r\n"
+
 sockHandler :: Socket -> (TVar DB) -> IO ()
 sockHandler sock db = do
     (handle, _, _) <- accept sock
@@ -40,12 +43,14 @@ getCommand :: Handle -> String -> (TVar DB) -> IO ()
 getCommand handle cmd db = do
     m <- atomRead db
     value <- getValue m cmd
-    hPutStrLn handle value
+    hPutStr handle $ concat ["$", valLength value, crlf, value, crlf]
+        where
+            valLength = show . length
 
 setCommand :: Handle -> String -> String -> (TVar DB) -> IO ()
 setCommand handle key value db = do
     updateValue (insert key value) db
-    hPutStrLn handle "OK"
+    hPutStr handle $ concat ["+OK", crlf]
 
 commandProcessor :: Handle -> (TVar DB) -> IO ()
 commandProcessor handle db = do
@@ -54,7 +59,7 @@ commandProcessor handle db = do
     case cmd of
         "get":key     -> getCommand handle (unwords key) db
         "set":key:val -> setCommand handle key (unwords val) db
-        _ -> do hPutStrLn handle "Unknown command"
+        _             -> do hPutStrLn handle "Unknown command"
     commandProcessor handle db
 
 -------------------------------------------------------------------------------
