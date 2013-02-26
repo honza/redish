@@ -7,7 +7,7 @@ import Control.Concurrent (forkIO)
 import Data.Map (fromList, lookup, Map, insert)
 import Prelude hiding (lookup)
 
-type DB = (Map String String)
+type DB = Map String String
 
 -------------------------------------------------------------------------------
 -- Server stuff
