@@ -44,7 +44,7 @@ getCommand handle cmd db = do
 
 setCommand :: Handle -> String -> String -> (TVar DB) -> IO ()
 setCommand handle key value db = do
-    appV (insert key value) db
+    updateValue (insert key value) db
     hPutStrLn handle "OK"
 
 commandProcessor :: Handle -> (TVar DB) -> IO ()
@@ -64,8 +64,8 @@ commandProcessor handle db = do
 atomRead :: TVar a -> IO a
 atomRead = atomically . readTVar
 
-appV :: (DB -> DB) -> TVar DB -> IO ()
-appV fn x = atomically $ modifyTVar x fn
+updateValue :: (DB -> DB) -> TVar DB -> IO ()
+updateValue fn x = atomically $ modifyTVar x fn
 
 getValue :: DB -> String -> IO (String)
 getValue db k = do
