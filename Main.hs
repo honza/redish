@@ -14,7 +14,7 @@ type DB = Map String String
 -------------------------------------------------------------------------------
 
 version :: String
-version = "0.0.2"
+version = "0.1.0"
 
 main :: IO ()
 main = withSocketsDo $ do
@@ -57,9 +57,23 @@ commandProcessor handle db = do
     line <- hGetLine handle
     let cmd = words line
     case cmd of
-        "get":key     -> getCommand handle (unwords key) db
-        "set":key:val -> setCommand handle key (unwords val) db
-        _             -> do hPutStrLn handle "Unknown command"
+        "*2":_ -> do
+            _   <- hGetLine handle -- argSize
+            _   <- hGetLine handle -- arg
+            _   <- hGetLine handle -- keySize
+            key <- hGetLine handle
+            getCommand handle key db
+
+        "*3":_ -> do
+            _     <- hGetLine handle -- argSize
+            _     <- hGetLine handle -- arg
+            _     <- hGetLine handle -- keySize
+            key   <- hGetLine handle
+            _     <- hGetLine handle -- valueSize
+            value <- hGetLine handle
+            setCommand  handle key value db
+
+        _  -> do hPutStrLn handle "Unknown command"
     commandProcessor handle db
 
 -------------------------------------------------------------------------------
