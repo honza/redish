@@ -22,7 +22,7 @@ main = withSocketsDo $ do
     let port = getPort args
     database <- atomically $ newTVar $ fromList [("__version__", version)]
     sock <- listenOn $ PortNumber $ fromIntegral port
-    putStrLn $ "Listening on localhost:" ++ (show port)
+    putStrLn $ "Listening on localhost:" ++ show port
     sockHandler sock database
 
 getPort :: [String] -> Int
@@ -32,14 +32,14 @@ getPort [] = 7777
 crlf :: String
 crlf = "\r\n"
 
-sockHandler :: Socket -> (TVar DB) -> IO ()
+sockHandler :: Socket -> TVar DB -> IO ()
 sockHandler sock db = do
     (handle, _, _) <- accept sock
     hSetBuffering handle NoBuffering
     _ <- forkIO $ commandProcessor handle db
     sockHandler sock db
 
-getCommand :: Handle -> String -> (TVar DB) -> IO ()
+getCommand :: Handle -> String -> TVar DB -> IO ()
 getCommand handle cmd db = do
     m <- atomRead db
     value <- getValue m cmd
@@ -47,12 +47,12 @@ getCommand handle cmd db = do
         where
             valLength = show . length
 
-setCommand :: Handle -> String -> String -> (TVar DB) -> IO ()
+setCommand :: Handle -> String -> String -> TVar DB -> IO ()
 setCommand handle key value db = do
     updateValue (insert key value) db
-    hPutStr handle $ concat ["+OK", crlf]
+    hPutStr handle $ "OK" ++ crlf
 
-commandProcessor :: Handle -> (TVar DB) -> IO ()
+commandProcessor :: Handle -> TVar DB -> IO ()
 commandProcessor handle db = do
     line <- hGetLine handle
     let cmd = words line
@@ -73,7 +73,7 @@ commandProcessor handle db = do
             value <- hGetLine handle
             setCommand  handle key value db
 
-        _  -> do hPutStrLn handle "Unknown command"
+        _  -> hPutStrLn handle "Unknown command"
     commandProcessor handle db
 
 -------------------------------------------------------------------------------
@@ -86,8 +86,8 @@ atomRead = atomically . readTVar
 updateValue :: (DB -> DB) -> TVar DB -> IO ()
 updateValue fn x = atomically $ modifyTVar x fn
 
-getValue :: DB -> String -> IO (String)
-getValue db k = do
+getValue :: DB -> String -> IO String
+getValue db k =
     case lookup k db of
       Just s -> return s
       Nothing -> return "null"
