@@ -1,13 +1,14 @@
+import Data.Map (fromList, lookup, Map, insert)
 import Control.Concurrent.STM
-import Control.Monad
+import Control.Concurrent (forkIO)
 import Network (listenOn, withSocketsDo, accept, PortID(..), Socket)
+import Prelude hiding (lookup)
 import System.Environment (getArgs)
 import System.IO (hSetBuffering, hGetLine, hPutStrLn, hPutStr, BufferMode(..), Handle)
-import Control.Concurrent (forkIO)
-import Data.Map (fromList, lookup, Map, insert)
-import Prelude hiding (lookup)
 
-type DB = Map String String
+type Key = String
+type Value = String
+type DB = Map Key Value
 
 -------------------------------------------------------------------------------
 -- Server stuff
@@ -39,24 +40,23 @@ sockHandler sock db = do
     _ <- forkIO $ commandProcessor handle db
     sockHandler sock db
 
-getCommand :: Handle -> String -> TVar DB -> IO ()
+getCommand :: Handle -> Key -> TVar DB -> IO ()
 getCommand handle cmd db = do
     m <- atomRead db
-    value <- getValue m cmd
+    let value = getValue m cmd
     hPutStr handle $ concat ["$", valLength value, crlf, value, crlf]
         where
             valLength = show . length
 
-setCommand :: Handle -> String -> String -> TVar DB -> IO ()
+setCommand :: Handle -> Key -> Value -> TVar DB -> IO ()
 setCommand handle key value db = do
     updateValue (insert key value) db
-    hPutStr handle $ "OK" ++ crlf
+    hPutStr handle $ "+OK" ++ crlf
 
 commandProcessor :: Handle -> TVar DB -> IO ()
 commandProcessor handle db = do
     line <- hGetLine handle
-    let cmd = words line
-    case cmd of
+    case words line of
         "*2":_ -> do
             _   <- hGetLine handle -- argSize
             _   <- hGetLine handle -- arg
@@ -69,12 +69,16 @@ commandProcessor handle db = do
             _     <- hGetLine handle -- arg
             _     <- hGetLine handle -- keySize
             key   <- hGetLine handle
-            _     <- hGetLine handle -- valueSize
+            size  <- hGetLine handle -- valueSize
             value <- hGetLine handle
-            setCommand  handle key value db
+
+            setCommand  handle key (take (getSize size) value) db
 
         _  -> hPutStrLn handle "Unknown command"
     commandProcessor handle db
+
+getSize :: String -> Int
+getSize = read . init . tail
 
 -------------------------------------------------------------------------------
 -- Data stuff
@@ -86,8 +90,8 @@ atomRead = atomically . readTVar
 updateValue :: (DB -> DB) -> TVar DB -> IO ()
 updateValue fn x = atomically $ modifyTVar x fn
 
-getValue :: DB -> String -> IO String
+getValue :: DB -> Key -> Value
 getValue db k =
     case lookup k db of
-      Just s -> return s
-      Nothing -> return "null"
+      Just s -> s
+      Nothing -> "null"
