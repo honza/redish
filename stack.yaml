@@ -1,0 +1,9 @@
+flags: {}
+packages:
+- '.'
+extra-deps:
+    - mtl-2.2.1
+    - network-2.6.2.1
+    - stm-2.4.4
+    - transformers-0.4.2.0
+resolver: ghc-7.10

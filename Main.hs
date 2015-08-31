@@ -1,14 +1,22 @@
 import Data.Map (fromList, lookup, Map, insert)
+import Data.Char (toLower)
 import Control.Concurrent.STM
 import Control.Concurrent (forkIO)
+import Control.Monad (guard)
+import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
+import Control.Monad.Trans.Class (lift)
 import Network (listenOn, withSocketsDo, accept, PortID(..), Socket)
 import Prelude hiding (lookup)
+import Text.Read (readMaybe)
 import System.Environment (getArgs)
-import System.IO (hSetBuffering, hGetLine, hPutStrLn, hPutStr, BufferMode(..), Handle)
+import System.IO (hSetBuffering, hGetLine, hPutStrLn, hPutStr, hIsEOF,
+                  BufferMode(..), Handle)
 
 type Key = String
 type Value = String
 type DB = Map Key Value
+data Command = Get Key
+             | Set Key Value
 
 -------------------------------------------------------------------------------
 -- Server stuff
@@ -40,45 +48,94 @@ sockHandler sock db = do
     _ <- forkIO $ commandProcessor handle db
     sockHandler sock db
 
-getCommand :: Handle -> Key -> TVar DB -> IO ()
-getCommand handle cmd db = do
+runCommand :: Handle -> Maybe Command -> TVar DB -> IO ()
+runCommand handle (Just (Get key)) db = do
     m <- atomRead db
-    let value = getValue m cmd
+    let value = getValue m key
     hPutStr handle $ concat ["$", valLength value, crlf, value, crlf]
         where
             valLength = show . length
-
-setCommand :: Handle -> Key -> Value -> TVar DB -> IO ()
-setCommand handle key value db = do
+runCommand handle (Just (Set key value)) db = do
     updateValue (insert key value) db
     hPutStr handle $ "+OK" ++ crlf
+runCommand _ Nothing _ = do
+  return ()
+
+stripCrlf :: String -> String
+stripCrlf = init
+
+getSize :: String -> Maybe Int
+getSize = readMaybe . stripCrlf . tail
+
+getArgSize :: Handle -> IO (Maybe Int)
+getArgSize h = do
+  s <- hGetLine h
+  return $ getSize s
+
+getArgSize2 :: Handle -> MaybeT IO Int
+getArgSize2 h = MaybeT $ getArgSize h
+
+getArg :: Handle -> MaybeT IO String
+getArg h = MaybeT $ do
+  arg <- hGetLine h
+  return $ Just (stripCrlf arg)
+
+processGet :: Handle -> IO (Maybe Command)
+processGet h = runMaybeT $ do
+  argSize <- getArgSize2 h
+  arg <- getArg h
+  -- liftIO $ print argSize
+
+  guard $ argSize == length arg
+  guard $ (map toLower arg) == "get"
+
+  keySize <- getArgSize2 h
+  key <- getArg h
+
+  guard $ keySize == length key
+
+  return $ Get key
+
+processSet :: Handle -> IO (Maybe Command)
+processSet h = runMaybeT $ do
+  argSize <- getArgSize2 h
+  arg <- getArg h
+  guard $ argSize == length arg
+  guard $ arg == "set"
+
+  keySize <- getArgSize2 h
+  key <- getArg h
+  guard $ keySize == length key
+
+  valueSize <- getArgSize2 h
+  value <- getArg h
+  guard $ valueSize == length value
+
+  return $ Set key value
+
+decideCommand :: Handle -> IO (Maybe Command)
+decideCommand h = runMaybeT $ do
+  arg <- getArgSize2 h
+  case arg of
+    2 -> do
+      c <- MaybeT $ processGet h
+      return c
+    3 -> do
+      c <- MaybeT $ processSet h
+      return c
+    _ -> do
+        lift $ hPutStrLn h (concat ["-ERR Unknown command", crlf])
+        MaybeT $ return Nothing
 
 commandProcessor :: Handle -> TVar DB -> IO ()
 commandProcessor handle db = do
-    line <- hGetLine handle
-    case words line of
-        "*2":_ -> do
-            _   <- hGetLine handle -- argSize
-            _   <- hGetLine handle -- arg
-            _   <- hGetLine handle -- keySize
-            key <- hGetLine handle
-            getCommand handle key db
-
-        "*3":_ -> do
-            _     <- hGetLine handle -- argSize
-            _     <- hGetLine handle -- arg
-            _     <- hGetLine handle -- keySize
-            key   <- hGetLine handle
-            size  <- hGetLine handle -- valueSize
-            value <- hGetLine handle
-
-            setCommand  handle key (take (getSize size) value) db
-
-        _  -> hPutStrLn handle "Unknown command"
-    commandProcessor handle db
-
-getSize :: String -> Int
-getSize = read . init . tail
+  ineof <- hIsEOF handle
+  if ineof
+     then return ()
+     else do
+        command <- decideCommand handle
+        runCommand handle command db
+        commandProcessor handle db
 
 -------------------------------------------------------------------------------
 -- Data stuff
