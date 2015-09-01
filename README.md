@@ -11,31 +11,25 @@ Building
 
     $ git clone git://github.com/honza/redish.git
     $ cd redish
-    $ make
-    $ ./dist/build/redish/redish 7777
+    $ stack build
+    $ stack exec redish
 
 Protocol
 --------
 
-    get key
-    set key name
-
-`key` may not contain spaces
+Redish implements the Redis protocol.  It currently only supports the get and
+set operations.
 
 Example
 -------
 
-    $ telnet localhost 7777
-    set name honza
-    OK
-    get name
-    honza
-    set name mrhonza
-    OK
-    get name
-    mrhonza
-    get age
-    null
+```
+$ redis-cli -p 7777
+127.0.0.1:7777> set name honza
+OK
+127.0.0.1:7777> get name
+"honza"
+```
 
 License
 -------
