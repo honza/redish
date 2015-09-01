@@ -1,50 +1,99 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 import Data.Map (fromList, lookup, Map, insert)
-import Data.Char (toLower)
 import Control.Concurrent.STM
 import Control.Concurrent (forkIO)
-import Control.Monad (guard)
-import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
-import Control.Monad.Trans.Class (lift)
 import Network (listenOn, withSocketsDo, accept, PortID(..), Socket)
-import Prelude hiding (lookup)
-import Text.Read (readMaybe)
+import Prelude hiding (lookup, take)
 import System.Environment (getArgs)
-import System.IO (hSetBuffering, hGetLine, hPutStrLn, hPutStr, hIsEOF,
-                  BufferMode(..), Handle)
+import Data.ByteString.Char8 (ByteString)
+import System.IO (Handle, hSetBinaryMode, hSetBuffering, BufferMode(..))
+import Data.Attoparsec.ByteString (takeTill)
+import Data.Attoparsec.ByteString.Char8 hiding (takeTill)
+import qualified Data.ByteString as S
+import Data.ByteString.Char8 (pack)
 
-type Key = String
-type Value = String
+version :: ByteString
+version = "0.5.0"
+
+type Key = ByteString
+type Value = ByteString
 type DB = Map Key Value
 data Command = Get Key
              | Set Key Value
+             | Unknown
+             deriving (Eq, Show)
 
--------------------------------------------------------------------------------
--- Server stuff
--------------------------------------------------------------------------------
+data Reply = SingleLine ByteString
+           | Error ByteString
+           | Integer Integer
+           | Bulk (Maybe ByteString)
+           | MultiBulk (Maybe [Reply])
+           deriving (Eq, Show)
 
-version :: String
-version = "0.1.0"
+parseReply :: Reply -> Maybe Command
+parseReply (MultiBulk (Just ((Bulk (Just "get")):(Bulk (Just a)):[]))) = Just $ Get a
+parseReply (MultiBulk (Just ((Bulk (Just "set")):(Bulk (Just a)):(Bulk (Just b)):[]))) = Just $ Set a b
+parseReply (MultiBulk _) = Just Unknown
+parseReply _ = Nothing
 
-main :: IO ()
-main = withSocketsDo $ do
-    args <- getArgs
-    let port = getPort args
-    database <- atomically $ newTVar $ fromList [("__version__", version)]
-    sock <- listenOn $ PortNumber $ fromIntegral port
-    putStrLn $ "Listening on localhost:" ++ show port
-    sockHandler sock database
+replyParser :: Parser Reply
+replyParser = choice [singleLine, integer, bulk, multiBulk, error']
+
+singleLine :: Parser Reply
+singleLine = SingleLine <$> (char '+' *> takeTill isEndOfLine <* endOfLine)
+
+error' :: Parser Reply
+error' = Error <$> (char '-' *> takeTill isEndOfLine <* endOfLine)
+
+integer :: Parser Reply
+integer = Integer <$> (char ':' *> signed decimal <* endOfLine)
+
+bulk :: Parser Reply
+bulk = Bulk <$> do
+    len <- char '$' *> signed decimal <* endOfLine
+    if len < 0
+        then return Nothing
+        else Just <$> take len <* endOfLine
+
+multiBulk :: Parser Reply
+multiBulk = MultiBulk <$> do
+    len <- char '*' *> signed decimal <* endOfLine
+    if len < 0
+        then return Nothing
+        else Just <$> count len replyParser
+
+hGetReplies :: Handle -> Parser a -> IO a
+hGetReplies h parser = go S.empty
+  where
+    go rest = do
+        parseResult <- parseWith readMore parser rest
+        case parseResult of
+            Fail _ _ s   -> error s
+            Partial{}    -> error "error: partial"
+            Done _ r -> do
+                return r
+
+    readMore = do
+        S.hGetSome h maxRead
+
+    maxRead = 4*1024
 
 getPort :: [String] -> Int
 getPort (x:_) = read x :: Int
 getPort [] = 7777
 
-crlf :: String
+crlf :: ByteString
 crlf = "\r\n"
+
+ok :: ByteString
+ok = "+OK\r\n"
 
 sockHandler :: Socket -> TVar DB -> IO ()
 sockHandler sock db = do
     (handle, _, _) <- accept sock
     hSetBuffering handle NoBuffering
+    hSetBinaryMode handle True
     _ <- forkIO $ commandProcessor handle db
     sockHandler sock db
 
@@ -52,94 +101,23 @@ runCommand :: Handle -> Maybe Command -> TVar DB -> IO ()
 runCommand handle (Just (Get key)) db = do
     m <- atomRead db
     let value = getValue m key
-    hPutStr handle $ concat ["$", valLength value, crlf, value, crlf]
+    S.hPutStr handle $ S.concat ["$", valLength value, crlf, value, crlf]
         where
-            valLength = show . length
+            valLength :: Value -> ByteString
+            valLength = pack . show . S.length
 runCommand handle (Just (Set key value)) db = do
     updateValue (insert key value) db
-    hPutStr handle $ "+OK" ++ crlf
-runCommand _ Nothing _ = do
-  return ()
-
-stripCrlf :: String -> String
-stripCrlf = init
-
-getSize :: String -> Maybe Int
-getSize = readMaybe . stripCrlf . tail
-
-getArgSize :: Handle -> IO (Maybe Int)
-getArgSize h = do
-  s <- hGetLine h
-  return $ getSize s
-
-getArgSize2 :: Handle -> MaybeT IO Int
-getArgSize2 h = MaybeT $ getArgSize h
-
-getArg :: Handle -> MaybeT IO String
-getArg h = MaybeT $ do
-  arg <- hGetLine h
-  return $ Just (stripCrlf arg)
-
-processGet :: Handle -> IO (Maybe Command)
-processGet h = runMaybeT $ do
-  argSize <- getArgSize2 h
-  arg <- getArg h
-  -- liftIO $ print argSize
-
-  guard $ argSize == length arg
-  guard $ (map toLower arg) == "get"
-
-  keySize <- getArgSize2 h
-  key <- getArg h
-
-  guard $ keySize == length key
-
-  return $ Get key
-
-processSet :: Handle -> IO (Maybe Command)
-processSet h = runMaybeT $ do
-  argSize <- getArgSize2 h
-  arg <- getArg h
-  guard $ argSize == length arg
-  guard $ arg == "set"
-
-  keySize <- getArgSize2 h
-  key <- getArg h
-  guard $ keySize == length key
-
-  valueSize <- getArgSize2 h
-  value <- getArg h
-  guard $ valueSize == length value
-
-  return $ Set key value
-
-decideCommand :: Handle -> IO (Maybe Command)
-decideCommand h = runMaybeT $ do
-  arg <- getArgSize2 h
-  case arg of
-    2 -> do
-      c <- MaybeT $ processGet h
-      return c
-    3 -> do
-      c <- MaybeT $ processSet h
-      return c
-    _ -> do
-        lift $ hPutStrLn h (concat ["-ERR Unknown command", crlf])
-        MaybeT $ return Nothing
+    S.hPutStr handle ok
+runCommand handle (Just Unknown) _ = do
+  S.hPutStr handle $ S.concat ["-ERR ", "unknown command", crlf]
+runCommand _ Nothing _ = return ()
 
 commandProcessor :: Handle -> TVar DB -> IO ()
 commandProcessor handle db = do
-  ineof <- hIsEOF handle
-  if ineof
-     then return ()
-     else do
-        command <- decideCommand handle
-        runCommand handle command db
-        commandProcessor handle db
-
--------------------------------------------------------------------------------
--- Data stuff
--------------------------------------------------------------------------------
+  reply <- hGetReplies handle replyParser
+  let command = parseReply reply
+  runCommand handle command db
+  commandProcessor handle db
 
 atomRead :: TVar a -> IO a
 atomRead = atomically . readTVar
@@ -152,3 +130,12 @@ getValue db k =
     case lookup k db of
       Just s -> s
       Nothing -> "null"
+
+main :: IO ()
+main = withSocketsDo $ do
+    args <- getArgs
+    let port = getPort args
+    database <- atomically $ newTVar $ fromList [("__version__", version)]
+    sock <- listenOn $ PortNumber $ fromIntegral port
+    putStrLn $ "Listening on localhost:" ++ show port
+    sockHandler sock database

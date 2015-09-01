@@ -1,5 +1,5 @@
 name:                redish
-version:             0.1.0
+version:             0.5.0
 synopsis:            A simple, Redis-inspired, key-value store
 license:             BSD3
 license-file:        LICENSE
@@ -12,6 +12,7 @@ cabal-version:       >=1.8
 
 executable redish
   main-is:           Main.hs
-  build-depends:     base, stm, network, containers, mtl, transformers
+  build-depends:     base, stm, network, containers, mtl, transformers,
+                     attoparsec, bytestring
   Ghc-Options:       -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
   Gefault-language:  Haskell2010
