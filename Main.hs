@@ -5,10 +5,8 @@ import Control.Concurrent.STM
 import Control.Concurrent (forkIO)
 import Network (listenOn, withSocketsDo, accept, PortID(..), Socket)
 import Prelude hiding (lookup, take)
-import System.Environment (getArgs)
 import Data.ByteString.Char8 (ByteString)
 import System.IO (Handle, hSetBinaryMode, hSetBuffering, BufferMode(..))
-import Data.Attoparsec.ByteString (takeTill)
 import Data.Attoparsec.ByteString.Char8 hiding (takeTill)
 import qualified Data.ByteString as S
 import Data.ByteString.Char8 (pack)
@@ -19,15 +17,13 @@ version = "0.5.0"
 type Key = ByteString
 type Value = ByteString
 type DB = Map Key Value
+
 data Command = Get Key
              | Set Key Value
              | Unknown
              deriving (Eq, Show)
 
-data Reply = SingleLine ByteString
-           | Error ByteString
-           | Integer Integer
-           | Bulk (Maybe ByteString)
+data Reply = Bulk (Maybe ByteString)
            | MultiBulk (Maybe [Reply])
            deriving (Eq, Show)
 
@@ -38,16 +34,7 @@ parseReply (MultiBulk _) = Just Unknown
 parseReply _ = Nothing
 
 replyParser :: Parser Reply
-replyParser = choice [singleLine, integer, bulk, multiBulk, error']
-
-singleLine :: Parser Reply
-singleLine = SingleLine <$> (char '+' *> takeTill isEndOfLine <* endOfLine)
-
-error' :: Parser Reply
-error' = Error <$> (char '-' *> takeTill isEndOfLine <* endOfLine)
-
-integer :: Parser Reply
-integer = Integer <$> (char ':' *> signed decimal <* endOfLine)
+replyParser = choice [bulk, multiBulk]
 
 bulk :: Parser Reply
 bulk = Bulk <$> do
@@ -71,17 +58,10 @@ hGetReplies h parser = go S.empty
         case parseResult of
             Fail _ _ s   -> error s
             Partial{}    -> error "error: partial"
-            Done _ r -> do
-                return r
+            Done _ r     -> return r
 
     readMore = do
-        S.hGetSome h maxRead
-
-    maxRead = 4*1024
-
-getPort :: [String] -> Int
-getPort (x:_) = read x :: Int
-getPort [] = 7777
+        S.hGetSome h (4*1024)
 
 crlf :: ByteString
 crlf = "\r\n"
@@ -133,9 +113,7 @@ getValue db k =
 
 main :: IO ()
 main = withSocketsDo $ do
-    args <- getArgs
-    let port = getPort args
     database <- atomically $ newTVar $ fromList [("__version__", version)]
-    sock <- listenOn $ PortNumber $ fromIntegral port
-    putStrLn $ "Listening on localhost:" ++ show port
+    sock <- listenOn $ PortNumber 7777
+    putStrLn $ "Listening on localhost 7777"
     sockHandler sock database
