@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import Data.Map (fromList, lookup, Map, insert)
+import Data.Map (fromList, findWithDefault, Map, insert)
 import Control.Concurrent.STM
 import Control.Concurrent (forkIO)
 import Network (listenOn, withSocketsDo, accept, PortID(..), Socket)
@@ -106,10 +106,7 @@ updateValue :: (DB -> DB) -> TVar DB -> IO ()
 updateValue fn x = atomically $ modifyTVar x fn
 
 getValue :: DB -> Key -> Value
-getValue db k =
-    case lookup k db of
-      Just s -> s
-      Nothing -> "null"
+getValue db k = findWithDefault "null" k db
 
 main :: IO ()
 main = withSocketsDo $ do
