@@ -5,11 +5,10 @@ import Control.Concurrent.STM
 import Control.Concurrent (forkIO)
 import Network (listenOn, withSocketsDo, accept, PortID(..), Socket)
 import Prelude hiding (lookup, take)
-import Data.ByteString.Char8 (ByteString)
+import Data.ByteString.Char8 (ByteString, pack)
 import System.IO (Handle, hSetBinaryMode, hSetBuffering, BufferMode(..))
 import Data.Attoparsec.ByteString.Char8 hiding (takeTill)
 import qualified Data.ByteString as S
-import Data.ByteString.Char8 (pack)
 
 version :: ByteString
 version = "0.5.0"
@@ -28,8 +27,8 @@ data Reply = Bulk (Maybe ByteString)
            deriving (Eq, Show)
 
 parseReply :: Reply -> Maybe Command
-parseReply (MultiBulk (Just ((Bulk (Just "get")):(Bulk (Just a)):[]))) = Just $ Get a
-parseReply (MultiBulk (Just ((Bulk (Just "set")):(Bulk (Just a)):(Bulk (Just b)):[]))) = Just $ Set a b
+parseReply (MultiBulk (Just [Bulk (Just "get"), Bulk (Just a)])) = Just $ Get a
+parseReply (MultiBulk (Just [Bulk (Just "set"), Bulk (Just a), Bulk (Just b)])) = Just $ Set a b
 parseReply (MultiBulk _) = Just Unknown
 parseReply _ = Nothing
 
@@ -60,8 +59,7 @@ hGetReplies h parser = go S.empty
             Partial{}    -> error "error: partial"
             Done _ r     -> return r
 
-    readMore = do
-        S.hGetSome h (4*1024)
+    readMore = S.hGetSome h (4*1024)
 
 crlf :: ByteString
 crlf = "\r\n"
@@ -88,7 +86,7 @@ runCommand handle (Just (Get key)) db = do
 runCommand handle (Just (Set key value)) db = do
     updateValue (insert key value) db
     S.hPutStr handle ok
-runCommand handle (Just Unknown) _ = do
+runCommand handle (Just Unknown) _ =
   S.hPutStr handle $ S.concat ["-ERR ", "unknown command", crlf]
 runCommand _ Nothing _ = return ()
 
@@ -112,5 +110,5 @@ main :: IO ()
 main = withSocketsDo $ do
     database <- atomically $ newTVar $ fromList [("__version__", version)]
     sock <- listenOn $ PortNumber 7777
-    putStrLn $ "Listening on localhost 7777"
+    putStrLn "Listening on localhost 7777"
     sockHandler sock database
