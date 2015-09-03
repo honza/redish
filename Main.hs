@@ -13,9 +13,9 @@ import qualified Data.ByteString as S
 version :: ByteString
 version = "0.5.0"
 
-type Key = ByteString
+type Key   = ByteString
 type Value = ByteString
-type DB = Map Key Value
+type DB    = Map Key Value
 
 data Command = Get Key
              | Set Key Value
@@ -27,9 +27,11 @@ data Reply = Bulk (Maybe ByteString)
            deriving (Eq, Show)
 
 parseReply :: Reply -> Maybe Command
-parseReply (MultiBulk (Just [Bulk (Just "get"), Bulk (Just a)])) = Just $ Get a
-parseReply (MultiBulk (Just [Bulk (Just "set"), Bulk (Just a), Bulk (Just b)])) = Just $ Set a b
-parseReply (MultiBulk _) = Just Unknown
+parseReply (MultiBulk (Just xs)) =
+  case xs of
+    [Bulk (Just "get"), Bulk (Just a)]                -> Just $ Get a
+    [Bulk (Just "set"), Bulk (Just a), Bulk (Just b)] -> Just $ Set a b
+    _                                                 -> Just Unknown
 parseReply _ = Nothing
 
 replyParser :: Parser Reply
