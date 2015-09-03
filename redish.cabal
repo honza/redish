@@ -1,4 +1,4 @@
-name:                redish
+name:                Redish
 version:             0.5.0
 synopsis:            A simple, Redis-inspired, key-value store
 license:             BSD3
@@ -10,7 +10,8 @@ category:            Database
 build-type:          Simple
 cabal-version:       >=1.8
 
-executable redish
+executable Redish
+  hs-source-dirs:    src
   main-is:           Main.hs
   build-depends:     base, stm, network, containers, mtl, transformers,
                      attoparsec, bytestring
