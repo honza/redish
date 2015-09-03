@@ -16,4 +16,4 @@ executable Redish
   build-depends:     base, stm, network, containers, mtl, transformers,
                      attoparsec, bytestring
   Ghc-Options:       -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
-  Gefault-language:  Haskell2010
+  Default-language:  Haskell2010
