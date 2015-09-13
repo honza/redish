@@ -97,7 +97,6 @@ commandProcessor handle db = do
   reply <- hGetReplies handle replyParser
   let command = parseReply reply
   runCommand handle command db
-  commandProcessor handle db
 
 atomRead :: TVar a -> IO a
 atomRead = atomically . readTVar
