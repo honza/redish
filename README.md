@@ -12,7 +12,7 @@ Building
     $ git clone git://github.com/honza/redish.git
     $ cd redish
     $ stack build
-    $ stack exec redish
+    $ stack exec Redish
 
 Protocol
 --------
