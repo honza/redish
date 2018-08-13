@@ -6,6 +6,8 @@ Haskell.
 
 **Note**: This is a learning exercise.
 
+You can [read the introductory blog post][1].
+
 Building
 --------
 
@@ -35,3 +37,5 @@ License
 -------
 
 BSD, short and sweet.
+
+[1]: https://honza.ca/2015/09/building-a-redis-clone-in-haskell
